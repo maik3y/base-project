@@ -6,7 +6,7 @@ import {
   BUDGET_RANGES,
   TRIP_PURPOSES,
   AGE_RANGES,
-} from '../types/seekend'
+} from '../types/swipe-away'
 
 interface UserOnboardingProps {
   onComplete: (profile: UserProfile) => void
@@ -238,7 +238,7 @@ export default function UserOnboarding({ onComplete }: UserOnboardingProps) {
                 <button
                   key={purpose}
                   onClick={() => toggleTripPurpose(purpose)}
-                  className={`rounded-xl border-2 p-3 text-sm transition-all ${
+                  className={`rounded-xl border-2 p-3 text-sm text-black transition-all ${
                     profile.tripPurpose?.includes(purpose)
                       ? 'border-purple-500 bg-purple-50 text-purple-700'
                       : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'

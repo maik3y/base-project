@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import SwipeWizard from '../components/SwipeWizard'
 import UserOnboarding from '../components/UserOnboarding'
-import { UserProfile, TripResult } from '../types/seekend'
+import { UserProfile, TripResult } from '../types/swipe-away'
 
 export default function Home() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
@@ -30,7 +30,7 @@ export default function Home() {
             </div>
 
             <h1 className="mb-4 bg-gradient-to-r from-white via-purple-100 to-white bg-clip-text text-5xl leading-tight font-bold tracking-tight text-transparent">
-              Seek-end
+              Swipe Away
             </h1>
 
             <p className="text-lg leading-relaxed font-medium text-white/90">

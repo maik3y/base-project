@@ -1,8 +1,8 @@
 import { createAzure } from '@ai-sdk/azure'
 import { generateText } from 'ai'
 import { NextRequest, NextResponse } from 'next/server'
-import { SEEKEND_SYSTEM_PROMPT } from '../../../lib/llm-prompts'
-import { UserProfile } from '../../../types/seekend'
+import { SWIPE_AWAY_SYSTEM_PROMPT } from '../../../lib/llm-prompts'
+import { UserProfile } from '../../../types/swipe-away'
 
 const azure = createAzure({
   resourceName: 'aistudio-acc-openai',
@@ -56,6 +56,22 @@ export async function POST(request: NextRequest) {
     const nextCategory =
       questionCategories[questionCount] || 'GENERAL TRAVEL PREFERENCE'
 
+    // Extract previously used terms and concepts to avoid duplicates
+    const usedConcepts = previousAnswers
+      .flatMap(answer => [
+        answer.leftOption?.toLowerCase().split(' ') || [],
+        answer.rightOption?.toLowerCase().split(' ') || [],
+        answer.question
+          ?.toLowerCase()
+          .split(' ')
+          .filter(word => word.length > 3) || [],
+      ])
+      .flat()
+
+    const usedQuestionTopics = previousAnswers
+      .map(answer => answer.question || '')
+      .filter(Boolean)
+
     // Build context from user profile and previous answers
     const userContext = `
 User Profile:
@@ -65,35 +81,47 @@ User Profile:
 - Location: ${userProfile.location}
 - Budget: €${userProfile.budget.min}-${userProfile.budget.max}
 - Trip Purposes: ${userProfile.tripPurpose.join(', ')}
-
-Previous Questions & Answers: ${
-      previousAnswers.length > 0
-        ? previousAnswers
-            .map((answer, index) => {
-              const selectedOption =
-                answer.answer === 'left'
-                  ? answer.leftOption
-                  : answer.rightOption
-              return `${index + 1}. ${answer.question || 'Question'}: Selected "${selectedOption || answer.answer + ' option'}"`
-            })
-            .join('\n')
-        : 'None yet'
-    }
-
+ 
+Previous Questions Asked:
+${
+  previousAnswers.length > 0
+    ? previousAnswers
+        .map((answer, index) => {
+          const selectedOption =
+            answer.answer === 'left' ? answer.leftOption : answer.rightOption
+          return `${index + 1}. QUESTION: "${answer.question || 'Unknown'}"
+         OPTIONS: "${answer.leftOption || 'left'}" vs "${answer.rightOption || 'right'}"
+         SELECTED: "${selectedOption || answer.answer + ' option'}"`
+        })
+        .join('\n')
+    : 'None yet'
+}
+ 
+Used Concepts to AVOID: ${usedConcepts.length > 0 ? usedConcepts.join(', ') : 'None'}
+ 
 Current question count: ${questionCount + 1}/6
-
-IMPORTANT: Generate a question about "${nextCategory}". 
-Make sure this question is DIFFERENT from previous topics and covers this specific category.
-Avoid repeating similar concepts from previous questions.
-
-Please generate the next preference question to better understand this user's travel preferences.
-
+REQUIRED CATEGORY: "${nextCategory}"
+ 
+CRITICAL INSTRUCTIONS:
+1. Generate a question about "${nextCategory}" that is COMPLETELY DIFFERENT from all previous questions
+2. Do NOT use any of these words/concepts: ${usedConcepts.slice(0, 20).join(', ')}
+3. Create entirely NEW and FRESH options that haven't appeared before
+4. Make the question specific to "${nextCategory}" but use different terminology than previous questions
+5. Ensure the left and right options are completely unique and not variations of previous options
+ 
+Examples of what to AVOID if they were used before:
+- If "beach" was used, don't use "coastline", "seaside", "ocean"
+- If "luxury" was used, don't use "premium", "upscale", "high-end"
+- If "hiking" was used, don't use "walking", "trekking", "trails"
+ 
+Generate a FRESH, UNIQUE question for "${nextCategory}" with completely new vocabulary.
+ 
 RESPOND WITH ONLY JSON - NO MARKDOWN OR CODE BLOCKS:
 `
 
     const { text } = await generateText({
       model: azure('gpt-4o-mini'),
-      system: SEEKEND_SYSTEM_PROMPT,
+      system: SWIPE_AWAY_SYSTEM_PROMPT,
       prompt: userContext,
       temperature: 0.7,
     })

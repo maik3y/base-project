@@ -1,8 +1,8 @@
 import { createAzure } from '@ai-sdk/azure'
 import { generateText } from 'ai'
 import { NextRequest, NextResponse } from 'next/server'
-import { SEEKEND_SYSTEM_PROMPT } from '../../../lib/llm-prompts'
-import { UserProfile, TripResult } from '../../../types/seekend'
+import { SWIPE_AWAY_SYSTEM_PROMPT } from '../../../lib/llm-prompts'
+import { UserProfile, TripResult } from '../../../types/swipe-away'
 
 const azure = createAzure({
   resourceName: 'aistudio-acc-openai',
@@ -70,7 +70,7 @@ Please generate a complete trip recommendation that perfectly matches their prof
 
     const { text } = await generateText({
       model: azure('gpt-4o-mini'),
-      system: SEEKEND_SYSTEM_PROMPT,
+      system: SWIPE_AWAY_SYSTEM_PROMPT,
       prompt: tripContext,
       temperature: 0.8,
       maxRetries: 2,

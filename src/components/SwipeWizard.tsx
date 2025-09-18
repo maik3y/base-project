@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { UserProfile, TripResult } from '../types/seekend'
+import { UserProfile, TripResult } from '../types/swipe-away'
 
 interface Question {
   id: string
@@ -25,18 +25,25 @@ export default function SwipeWizard({
   onTripGenerated,
 }: SwipeWizardProps) {
   const [questions, setQuestions] = useState<Question[]>([])
-  const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Answer[]>([])
   const [isComplete, setIsComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
+  // Current question index is based on the number of answers given
+  const currentIndex = answers.length
   const currentQuestion = questions[currentIndex]
 
   const generateNextQuestion = useCallback(async () => {
+    // Prevent duplicate API calls
+    if (isLoading) {
+      console.log('⚠️ Preventing duplicate question generation')
+      return
+    }
     setIsLoading(true)
     try {
       const response = await fetch('/api/generate-question', {
@@ -71,7 +78,7 @@ export default function SwipeWizard({
     } finally {
       setIsLoading(false)
     }
-  }, [userProfile, answers])
+  }, [userProfile, answers, isLoading])
 
   const generateTripRecommendation = useCallback(
     async (finalAnswers: Answer[]) => {
@@ -120,12 +127,17 @@ export default function SwipeWizard({
 
   // Generate the first question when component mounts
   useEffect(() => {
-    if (questions.length === 0) {
+    if (!isInitialized && questions.length === 0 && !isLoading) {
+      setIsInitialized(true)
       generateNextQuestion()
     }
-  }, [questions.length, generateNextQuestion])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Intentionally empty - only run once on mount to prevent duplicate calls
 
   const handleAnswer = async (answer: 'left' | 'right') => {
+    // Prevent multiple clicks during processing
+    if (isLoading) return
+
     const newAnswer: Answer = {
       questionId: currentQuestion.id,
       answer,
@@ -134,22 +146,24 @@ export default function SwipeWizard({
     const updatedAnswers = [...answers, newAnswer]
     setAnswers(updatedAnswers)
 
+    // Reset drag state
+    setDragOffset({ x: 0, y: 0 })
+
     // Check if we should generate another question or complete
     if (updatedAnswers.length >= 6) {
       // Generate trip recommendation
       await generateTripRecommendation(updatedAnswers)
     } else {
-      // Generate next question
+      // Generate next question (the loading state will show until it's ready)
       await generateNextQuestion()
-      setCurrentIndex(prev => prev + 1)
     }
   }
 
   const resetWizard = () => {
-    setCurrentIndex(0)
     setAnswers([])
     setQuestions([])
     setIsComplete(false)
+    setIsInitialized(false)
     setDragOffset({ x: 0, y: 0 })
     // Regenerate first question
     generateNextQuestion()
@@ -278,13 +292,20 @@ export default function SwipeWizard({
     )
   }
 
-  // Show loading state if no questions yet or generating next question
-  if (!currentQuestion && isLoading) {
+  // Show loading state if no current question (either initial load or between questions)
+  if (
+    !currentQuestion &&
+    (isLoading || questions.length < answers.length + 1)
+  ) {
     return (
       <div className="flex h-[600px] items-center justify-center">
         <div className="text-center">
           <div className="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600"></div>
-          <p className="text-white/80">Generating personalized questions...</p>
+          <p className="text-white/80">
+            {questions.length === 0
+              ? 'Generating personalized questions...'
+              : 'Loading next question...'}
+          </p>
         </div>
       </div>
     )
@@ -377,7 +398,7 @@ export default function SwipeWizard({
           </h3>
 
           <div className="mb-8 flex w-full flex-col items-center gap-4 sm:flex-row sm:justify-between">
-            <div className="flex w-full flex-col items-center rounded-2xl border border-red-100/50 bg-gradient-to-br from-red-50 to-pink-50 px-4 py-6 text-center transition-transform hover:scale-105">
+            <div className="border-red-100/50px-4 flex w-full flex-col items-center rounded-2xl border py-6 text-center text-black transition-transform hover:scale-105">
               <div className="mb-2 text-3xl text-black">
                 {currentQuestion?.leftOption.split(' ')[1] || '❄️'}
               </div>
@@ -390,7 +411,7 @@ export default function SwipeWizard({
               VS
             </div>
 
-            <div className="flex w-full flex-col items-center rounded-2xl border border-green-100/50 bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-6 text-center transition-transform hover:scale-105">
+            <div className="flex w-full flex-col items-center rounded-2xl border px-4 py-6 text-center text-black transition-transform hover:scale-105">
               <div className="mb-2 text-3xl text-black">
                 {currentQuestion?.rightOption.split(' ')[1] || '☀️'}
               </div>
