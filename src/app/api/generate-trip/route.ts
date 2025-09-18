@@ -83,7 +83,7 @@ Please generate a complete trip recommendation that perfectly matches their prof
     } else if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '')
     }
-    
+
     const response: TripGenerationResponse = JSON.parse(jsonText)
 
     // Validate response structure
