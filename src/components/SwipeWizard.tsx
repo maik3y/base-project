@@ -1,57 +1,34 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { UserProfile, TripResult } from '../types/seekend'
 
 interface Question {
-  id: number
+  id: string
   text: string
   leftOption: string
   rightOption: string
 }
 
-const questions: Question[] = [
-  {
-    id: 1,
-    text: 'Weather Preference',
-    leftOption: 'Cold Weather ❄️',
-    rightOption: 'Hot Weather ☀️',
-  },
-  {
-    id: 2,
-    text: 'Coffee or Tea?',
-    leftOption: 'Tea 🍵',
-    rightOption: 'Coffee ☕',
-  },
-  {
-    id: 3,
-    text: 'Weekend Activity',
-    leftOption: 'Indoor 🏠',
-    rightOption: 'Outdoor 🌲',
-  },
-  {
-    id: 4,
-    text: 'Pet Preference',
-    leftOption: 'Cats 🐱',
-    rightOption: 'Dogs 🐶',
-  },
-  {
-    id: 5,
-    text: 'Movie Genre',
-    leftOption: 'Comedy 😄',
-    rightOption: 'Action 💥',
-  },
-  {
-    id: 6,
-    text: 'Food Style',
-    leftOption: 'Sweet 🍰',
-    rightOption: 'Savory 🍕',
-  },
-]
+interface Answer {
+  questionId: string
+  answer: 'left' | 'right'
+}
 
-export default function SwipeWizard() {
+interface SwipeWizardProps {
+  userProfile: UserProfile
+  onTripGenerated?: (tripResult: TripResult) => void
+}
+
+export default function SwipeWizard({
+  userProfile,
+  onTripGenerated,
+}: SwipeWizardProps) {
+  const [questions, setQuestions] = useState<Question[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<Record<number, 'left' | 'right'>>({})
+  const [answers, setAnswers] = useState<Answer[]>([])
   const [isComplete, setIsComplete] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -59,24 +36,123 @@ export default function SwipeWizard() {
 
   const currentQuestion = questions[currentIndex]
 
-  const handleAnswer = (answer: 'left' | 'right') => {
-    setAnswers(prev => ({
-      ...prev,
-      [currentQuestion.id]: answer,
-    }))
+  const generateNextQuestion = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/generate-question', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userProfile,
+          previousAnswers: answers,
+          questionCount: answers.length,
+        }),
+      })
 
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1)
+      const data = await response.json()
+
+      if (data.success) {
+        setQuestions(prev => [...prev, data.question])
+      } else {
+        console.error('Failed to generate question:', data.error)
+        // Fallback to completing if we can't generate more questions
+        if (answers.length >= 3) {
+          setIsComplete(true)
+        }
+      }
+    } catch (error) {
+      console.error('Error generating question:', error)
+      // Fallback to completing if we can't generate questions
+      if (answers.length >= 3) {
+        setIsComplete(true)
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }, [userProfile, answers])
+
+  const generateTripRecommendation = useCallback(
+    async (finalAnswers: Answer[]) => {
+      setIsLoading(true)
+      try {
+        // Prepare answers with question context for better LLM understanding
+        const answersWithContext = finalAnswers.map((answer, index) => ({
+          questionId: answer.questionId,
+          answer: answer.answer,
+          question: questions[index]?.text,
+          leftOption: questions[index]?.leftOption,
+          rightOption: questions[index]?.rightOption,
+        }))
+
+        const response = await fetch('/api/generate-trip', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userProfile,
+            swipeAnswers: answersWithContext,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setIsComplete(true)
+          onTripGenerated?.(data.tripResult)
+        } else {
+          console.error('Failed to generate trip:', data.error)
+          // Still complete but with error state
+          setIsComplete(true)
+        }
+      } catch (error) {
+        console.error('Error generating trip:', error)
+        // Still complete but with error state
+        setIsComplete(true)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [userProfile, questions, onTripGenerated]
+  )
+
+  // Generate the first question when component mounts
+  useEffect(() => {
+    if (questions.length === 0) {
+      generateNextQuestion()
+    }
+  }, [questions.length, generateNextQuestion])
+
+  const handleAnswer = async (answer: 'left' | 'right') => {
+    const newAnswer: Answer = {
+      questionId: currentQuestion.id,
+      answer,
+    }
+
+    const updatedAnswers = [...answers, newAnswer]
+    setAnswers(updatedAnswers)
+
+    // Check if we should generate another question or complete
+    if (updatedAnswers.length >= 6) {
+      // Generate trip recommendation
+      await generateTripRecommendation(updatedAnswers)
     } else {
-      setIsComplete(true)
+      // Generate next question
+      await generateNextQuestion()
+      setCurrentIndex(prev => prev + 1)
     }
   }
 
   const resetWizard = () => {
     setCurrentIndex(0)
-    setAnswers({})
+    setAnswers([])
+    setQuestions([])
     setIsComplete(false)
     setDragOffset({ x: 0, y: 0 })
+    // Regenerate first question
+    generateNextQuestion()
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -147,9 +223,13 @@ export default function SwipeWizard() {
 
             <div className="space-y-4">
               {questions.map((question, index) => {
-                const answer = answers[question.id]
+                const answerObj = answers.find(
+                  a => a.questionId === question.id
+                )
                 const selectedOption =
-                  answer === 'left' ? question.leftOption : question.rightOption
+                  answerObj?.answer === 'left'
+                    ? question.leftOption
+                    : question.rightOption
 
                 return (
                   <div
@@ -198,23 +278,59 @@ export default function SwipeWizard() {
     )
   }
 
+  // Show loading state if no questions yet or generating next question
+  if (!currentQuestion && isLoading) {
+    return (
+      <div className="flex h-[600px] items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600"></div>
+          <p className="text-white/80">Generating personalized questions...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentQuestion) {
+    return (
+      <div className="flex h-[600px] items-center justify-center">
+        <div className="text-center">
+          <p className="text-white/80">
+            Unable to generate questions. Please try again.
+          </p>
+          <button
+            onClick={resetWizard}
+            className="mt-4 rounded-2xl bg-gradient-to-r from-purple-500 to-blue-600 px-6 py-3 font-semibold text-white"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative h-[600px] select-none">
       {/* Progress indicator */}
       <div className="mb-6 flex justify-center">
         <div className="inline-flex space-x-3 rounded-full border border-white/30 bg-white/60 p-2 backdrop-blur-sm">
-          {questions.map((_, index) => (
+          {/* Show completed answers */}
+          {answers.map((_, index) => (
             <div
-              key={index}
-              className={`h-3 w-3 rounded-full transition-all duration-500 ${
-                index === currentIndex
-                  ? 'scale-125 bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg'
-                  : index < currentIndex
-                    ? 'bg-gradient-to-r from-green-400 to-emerald-500 shadow-md'
-                    : 'bg-gray-300/70'
-              }`}
+              key={`completed-${index}`}
+              className="h-3 w-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 shadow-md transition-all duration-500"
             />
           ))}
+          {/* Show current question */}
+          <div className="h-3 w-3 scale-125 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg transition-all duration-500" />
+          {/* Show remaining slots (up to 6 total) */}
+          {Array.from({ length: Math.max(0, 6 - answers.length - 1) }).map(
+            (_, index) => (
+              <div
+                key={`remaining-${index}`}
+                className="h-3 w-3 rounded-full bg-gray-300/70 transition-all duration-500"
+              />
+            )
+          )}
         </div>
       </div>
 

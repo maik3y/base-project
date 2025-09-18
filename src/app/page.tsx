@@ -1,6 +1,17 @@
+'use client'
+
+import { useState } from 'react'
 import SwipeWizard from '../components/SwipeWizard'
+import UserOnboarding from '../components/UserOnboarding'
+import { UserProfile, TripResult } from '../types/seekend'
 
 export default function Home() {
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [tripResult, setTripResult] = useState<TripResult | null>(null)
+
+  const handleOnboardingComplete = (profile: UserProfile) => {
+    setUserProfile(profile)
+  }
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-purple-900 via-purple-700 to-indigo-800">
       {/* Decorative background elements */}
@@ -23,16 +34,52 @@ export default function Home() {
             </h1>
 
             <p className="text-lg leading-relaxed font-medium text-white/90">
-              Discover your preferences through
+              {userProfile
+                ? `Welcome back, ${userProfile.name}! Ready for your next adventure?`
+                : 'Discover your perfect weekend getaway through personalized preferences'}
               <br />
               <span className="bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text font-semibold text-transparent">
-                intuitive swipe interactions
+                {userProfile
+                  ? 'Swipe to discover your trip'
+                  : "Let's get started"}
               </span>
             </p>
           </div>
 
-          {/* Wizard Component */}
-          <SwipeWizard />
+          {/* Show onboarding, wizard, or trip results based on state */}
+          {tripResult ? (
+            <div className="text-center text-white">
+              <h2 className="mb-4 text-2xl font-bold">Your Perfect Getaway!</h2>
+              <div className="rounded-2xl bg-white/10 p-6 backdrop-blur-lg">
+                <h3 className="mb-2 text-xl font-semibold">
+                  {tripResult.destination}
+                </h3>
+                <p className="mb-4">{tripResult.duration}</p>
+                <p className="mb-4 text-lg">
+                  Budget: €{tripResult.totalEstimatedCost}
+                </p>
+                <button
+                  onClick={() => {
+                    setTripResult(null)
+                    setUserProfile(null)
+                  }}
+                  className="rounded-2xl bg-gradient-to-r from-purple-500 to-blue-600 px-6 py-3 font-semibold text-white"
+                >
+                  Plan Another Trip
+                </button>
+              </div>
+            </div>
+          ) : userProfile ? (
+            <SwipeWizard
+              userProfile={userProfile}
+              onTripGenerated={tripResult => {
+                console.log('Trip generated:', tripResult)
+                setTripResult(tripResult)
+              }}
+            />
+          ) : (
+            <UserOnboarding onComplete={handleOnboardingComplete} />
+          )}
         </div>
       </main>
     </div>
