@@ -12,7 +12,10 @@
     "lint:fix": "eslint --fix ."
   },
   "dependencies": {
+    "@ai-sdk/azure": "^2.0.32",
+    "@ai-sdk/google": "^2.0.14",
     "@ai-sdk/openai": "^2.0.32",
+    "@ai-sdk/react": "^2.0.45",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.89.0",
     "ai": "^5.0.45",

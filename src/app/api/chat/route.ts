@@ -1,34 +1,57 @@
-import { createOpenAI } from '@ai-sdk/openai'
-import { streamText } from 'ai'
-
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
 
-    // Use OpenRouter API key
-    const apiKey = process.env.OPENROUTER_API_KEY
-    if (!apiKey) {
-      return new Response('OpenRouter API key not configured', { status: 500 })
+    // Use Azure OpenAI GPT-4o
+    const apiKey = process.env.AZURE_OPENAI_GPT4O_KEY
+    const endpoint = process.env.AZURE_OPENAI_GPT4O_ENDPOINT
+    const apiVersion = process.env.AZURE_OPENAI_GPT4O_API_VERSION
+
+    if (!apiKey || !endpoint) {
+      return new Response('Azure OpenAI configuration not complete', {
+        status: 500,
+      })
     }
 
-    // Create OpenRouter instance (using OpenAI-compatible interface)
-    const openai = createOpenAI({
-      apiKey,
-      baseURL: 'https://openrouter.ai/api/v1',
+    console.log('Making request to Azure OpenAI...')
+    console.log('Endpoint:', endpoint)
+
+    // Make direct call to Azure OpenAI
+    const response = await fetch(`${endpoint}?api-version=${apiVersion}`, {
+      method: 'POST',
       headers: {
-        'HTTP-Referer':
-          process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-        'X-Title': 'Base Project AI App',
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
       },
+      body: JSON.stringify({
+        messages,
+        stream: true,
+        max_tokens: 1000,
+        temperature: 0.7,
+      }),
     })
 
-    const result = streamText({
-      model: openai('openai/gpt-4o-mini'),
-      messages,
-    })
+    console.log('Azure response status:', response.status)
 
-    return result.toTextStreamResponse({
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(
+        'Azure OpenAI error:',
+        response.status,
+        response.statusText,
+        errorText
+      )
+      return new Response(`Azure OpenAI request failed: ${errorText}`, {
+        status: response.status,
+      })
+    }
+
+    // Return the streaming response with proper SSE headers
+    return new Response(response.body, {
       headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -36,6 +59,6 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     console.error('Chat API Error:', error)
-    return new Response('Internal Server Error', { status: 500 })
+    return new Response(`Internal Server Error: ${error}`, { status: 500 })
   }
 }

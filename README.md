@@ -62,9 +62,18 @@ This project includes AI integration using the Vercel AI SDK with OpenRouter for
    ```
 
 2. Add your OpenRouter API key to `.env.local`:
+
    ```
    OPENROUTER_API_KEY=your_api_key_here
    ```
+
+3. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Visit `http://localhost:3000` and try the chat interface to validate your AI integration.
 
 ### Available AI Features
 
